@@ -9,6 +9,7 @@ loadEnvFile();
 
 const PORT = Number(process.env.APP_PORT || 3000);
 const LOGIN_EMAIL = process.env.LOGIN_EMAIL;
+const AUTHORIZED_EMAIL = process.env.AUTHORIZED_EMAIL || LOGIN_EMAIL;
 const LOGIN_PIN = process.env.LOGIN_PIN;
 const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString("hex");
 const PUBLIC_DIR = path.join(process.cwd(), "public");
@@ -38,9 +39,22 @@ function loadEnvFile() {
 }
 
 function assertAuthConfig() {
-  if (!LOGIN_EMAIL || !LOGIN_PIN) {
-    throw new Error("LOGIN_EMAIL and LOGIN_PIN must be configured in .env or environment variables.");
+  if (!AUTHORIZED_EMAIL || !LOGIN_PIN) {
+    throw new Error("AUTHORIZED_EMAIL and LOGIN_PIN must be configured in .env or environment variables.");
   }
+}
+
+function authMessage(language, key) {
+  const messages = {
+    ar: {
+      invalidAuthorizedEmail: "البريد الإلكتروني غير مصرح"
+    },
+    en: {
+      invalidAuthorizedEmail: "Invalid authorized email"
+    }
+  };
+  const lang = language === "ar" ? "ar" : "en";
+  return messages[lang][key] || messages.en[key];
 }
 
 function sendJson(res, status, payload) {
@@ -186,21 +200,45 @@ function escapeCsv(value) {
   return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
-function makeCsv(tasks) {
+function formatCsvDate(value) {
+  return value ? String(value).slice(0, 10) : "";
+}
+
+function isTaskOverdueForReport(task) {
+  if (task.status !== "active" || !task.dueDate) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return new Date(`${task.dueDate}T00:00:00`).getTime() < today.getTime();
+}
+
+function makeCsv(tasks, language = "ar") {
+  const ar = language === "ar";
+  const priorityLabels = ar
+    ? { high: "عالية", medium: "متوسطة", low: "منخفضة" }
+    : { high: "High", medium: "Medium", low: "Low" };
+  const statusLabels = ar
+    ? { active: "نشطة", completed: "مكتملة", overdue: "متأخرة" }
+    : { active: "Active", completed: "Completed", overdue: "Overdue" };
+  const headers = ar
+    ? ["رقم المهمة", "العنوان", "الوصف", "الأولوية", "تاريخ الإنشاء", "تاريخ التسليم", "الحالة", "تاريخ الإكمال"]
+    : ["Task No.", "Title", "Description", "Priority", "Created Date", "Due Date", "Status", "Completed Date"];
   const rows = [
-    ["Task Number", "Title", "Description", "Priority", "Created At", "Due Date", "Status", "Completed At"],
-    ...tasks.map((task, index) => [
-      index + 1,
-      task.title,
-      task.description,
-      task.priority,
-      task.createdAt,
-      task.dueDate,
-      task.status,
-      task.completedAt
-    ])
+    headers,
+    ...tasks.map((task, index) => {
+      const status = isTaskOverdueForReport(task) ? "overdue" : task.status;
+      return [
+        index + 1,
+        task.title,
+        task.description,
+        priorityLabels[task.priority] || task.priority,
+        formatCsvDate(task.createdAt),
+        formatCsvDate(task.dueDate),
+        statusLabels[status] || status,
+        formatCsvDate(task.completedAt)
+      ];
+    })
   ];
-  return rows.map((row) => row.map(escapeCsv).join(",")).join("\n");
+  return `\uFEFF${rows.map((row) => row.map(escapeCsv).join(",")).join("\n")}`;
 }
 
 async function serveStatic(req, res) {
@@ -275,8 +313,8 @@ async function handleApi(req, res) {
     if (lock.locked) return;
     const body = await readBody(req);
     const email = String(body.email || "").trim().toLowerCase();
-    if (email !== LOGIN_EMAIL.toLowerCase()) {
-      sendLoginFailure(res, lock.key, "Email is not authorized.");
+    if (email !== AUTHORIZED_EMAIL.toLowerCase()) {
+      sendLoginFailure(res, lock.key, authMessage(body.language, "invalidAuthorizedEmail"));
       return;
     }
 
@@ -292,10 +330,10 @@ async function handleApi(req, res) {
     });
 
     try {
-      await reminderService.sendMail({
-        to: LOGIN_EMAIL,
-        subject: "To Do Task - Login OTP",
-        body: `Your OTP code is: ${code}\nThis code will expire in 10 minutes.`
+      await reminderService.sendLoginOtpEmail({
+        to: email,
+        code,
+        language: body.language
       });
       sendJson(res, 200, { ok: true });
     } catch {
@@ -313,7 +351,7 @@ async function handleApi(req, res) {
     const otp = String(body.otp || "").trim();
     const challenge = otpChallenges.get(email);
 
-    if (email !== LOGIN_EMAIL.toLowerCase() || !challenge || challenge.expiresAt < Date.now()) {
+    if (email !== AUTHORIZED_EMAIL.toLowerCase() || !challenge || challenge.expiresAt < Date.now()) {
       otpChallenges.delete(email);
       sendLoginFailure(res, lock.key, "Invalid or expired OTP.");
       return;
@@ -366,20 +404,28 @@ async function handleApi(req, res) {
   }
 
   if (taskMatch && taskMatch[2] === "complete" && req.method === "POST") {
+    const body = await readBody(req);
     const task = await taskStore.completeTask(taskMatch[1]);
+    if (task) {
+      reminderService.sendTaskCompletedEmail(task, body.language).catch((error) => {
+        console.warn("Task completion email failed:", error.message);
+      });
+    }
     sendJson(res, task ? 200 : 404, task ? { task } : { error: "Task not found." });
     return;
   }
 
   if (url.pathname === "/api/report.csv" && req.method === "GET") {
     if (!requireAuth(req, res)) return;
+    const language = url.searchParams.get("lang") === "en" ? "en" : "ar";
     const tasks = await taskStore.listTasks();
+    const filename = language === "ar" ? "تقرير-المهام.csv" : "tasks-report.csv";
     res.writeHead(200, {
       "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": "attachment; filename=\"to-do-task-report.csv\"",
+      "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
       "Cache-Control": "no-store"
     });
-    res.end(makeCsv(tasks));
+    res.end(makeCsv(tasks, language));
     return;
   }
 
