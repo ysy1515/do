@@ -3,3 +3,12 @@ node_modules/
 .env
 data/*.json
 !data/.gitkeep
+
+# Local server backups and secrets
+.env
+.env.*
+*.bak*
+*.bak_*
+ecosystem.config.cjs.bak_*
+public/*.bak_*
+server.js.bak_*

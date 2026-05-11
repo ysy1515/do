@@ -495,7 +495,7 @@ function renderTasks() {
 }
 
 async function loadTasks() {
-  const payload = await api("/api/tasks");
+  const payload = await api("/do/api/tasks");
   tasks = payload.tasks;
   setStats(payload.stats);
   renderTasks();
@@ -534,7 +534,7 @@ async function submitPinLogin() {
   if (submit.disabled) return;
   setButtonBusy(submit, true, "Signing in...", "Sign in");
   try {
-    await api("/api/login/pin", {
+    await api("/do/api/login/pin", {
       method: "POST",
       body: JSON.stringify({ pin: pinLoginForm.pin.value })
     });
@@ -567,7 +567,7 @@ sendOtpButton.addEventListener("click", async () => {
   otpLoginMessage.textContent = "";
   setButtonBusy(sendOtpButton, true, t("sendingOtp"), t("sendOtp"));
   try {
-    await api("/api/login/otp/request", {
+    await api("/do/api/login/otp/request", {
       method: "POST",
       body: JSON.stringify({ email: otpEmail.value.trim(), language })
     });
@@ -587,7 +587,7 @@ otpLoginForm.addEventListener("submit", async (event) => {
   otpLoginMessage.textContent = "";
   setButtonBusy(verifyOtpButton, true, "Verifying...", "Verify and Sign in");
   try {
-    await api("/api/login/otp/verify", {
+    await api("/do/api/login/otp/verify", {
       method: "POST",
       body: JSON.stringify({
         email: otpEmail.value.trim(),
@@ -610,7 +610,7 @@ taskForm.addEventListener("submit", async (event) => {
   try {
     const id = fields.id.value;
     const method = id ? "PUT" : "POST";
-    const path = id ? `/api/tasks/${id}` : "/api/tasks";
+    const path = id ? `/api/tasks/${id}` : "/do/api/tasks";
     await api(path, { method, body: JSON.stringify(taskPayload()) });
     closeTaskModal({ reset: true });
     await loadTasks();
@@ -641,7 +641,7 @@ languageToggle.addEventListener("click", () => {
 });
 
 logoutButton.addEventListener("click", async () => {
-  await api("/api/logout", { method: "POST" });
+  await api("/do/api/logout", { method: "POST" });
   tasks = [];
   resetTaskForm();
   setAuthenticated(false);
@@ -652,7 +652,7 @@ async function init() {
   renderAuthState();
   setLoginMode("pin");
   try {
-    const session = await api("/api/session");
+    const session = await api("/do/api/session");
     if (session.authenticated) {
       setAuthenticated(true);
       await loadTasks();
