@@ -1,0 +1,18 @@
+{
+  "name": "to-do-task",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Simple professional To Do Task app",
+  "main": "server.js",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js",
+    "check": "node --check server.js && node --check src/storage/taskStore.js && node --check src/services/EmailReminderService.js && node --check public/app.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "nodemailer": "^8.0.7"
+  }
+}

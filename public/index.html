@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>To Do Task</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main id="login-view" class="login-shell" dir="ltr" hidden>
+      <div class="login-background" aria-hidden="true">
+        <div class="ambient ambient-one"></div>
+        <div class="ambient ambient-two"></div>
+        <div class="floating-note note-one">
+          <span class="note-check"></span>
+          <div>
+            <strong>Plan sprint</strong>
+            <small>Today</small>
+          </div>
+        </div>
+        <div class="floating-note note-two">
+          <span class="note-ring"></span>
+          <div>
+            <strong>72%</strong>
+            <small>Focus</small>
+          </div>
+        </div>
+        <div class="floating-note note-three">
+          <span class="note-calendar">12</span>
+          <div>
+            <strong>Due soon</strong>
+            <small>2 tasks</small>
+          </div>
+        </div>
+      </div>
+
+      <section class="login-panel" aria-labelledby="login-title">
+        <div class="login-brand">
+          <div class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 32 32" focusable="false" aria-hidden="true">
+              <path d="M9.5 16.4 14 20.9 23.2 11.7" />
+              <path d="M9 8.5h14" />
+              <path d="M9 24h14" />
+            </svg>
+          </div>
+          <div>
+            <h1 id="login-title">To Do Task</h1>
+            <p class="owner-name">Yahya Alshahrani</p>
+          </div>
+        </div>
+        <p class="login-subtitle">Manage your priorities with clarity.</p>
+
+        <div class="login-tabs" role="tablist" aria-label="Login options">
+          <button id="pin-tab" class="login-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="pin-login-form">
+            PIN Access
+          </button>
+          <button id="otp-tab" class="login-tab" type="button" role="tab" aria-selected="false" aria-controls="otp-login-form">
+            Email OTP
+          </button>
+        </div>
+
+        <form id="pin-login-form" class="login-form">
+          <label class="field-group">
+            <span>Secure PIN</span>
+            <div class="input-shell">
+              <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                <path d="M7 10V8a5 5 0 0 1 10 0v2" />
+                <rect x="5" y="10" width="14" height="10" rx="3" />
+              </svg>
+              <input id="pin" name="pin" type="password" inputmode="numeric" autocomplete="current-password" placeholder="Enter your PIN" required />
+            </div>
+          </label>
+          <button class="primary-action" type="submit">Sign in</button>
+          <p id="pin-login-message" class="form-message" role="status"></p>
+        </form>
+
+        <form id="otp-login-form" class="login-form" hidden>
+          <label class="field-group">
+            <span>Authorized email</span>
+            <div class="input-shell">
+              <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                <path d="M4 7.5A2.5 2.5 0 0 1 6.5 5h11A2.5 2.5 0 0 1 20 7.5v9A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5z" />
+                <path d="m5.5 7 6.5 5 6.5-5" />
+              </svg>
+              <input id="otp-email" name="email" type="email" autocomplete="email" placeholder="name@domain.gov.sa" required />
+            </div>
+          </label>
+          <p class="login-helper">OTP is sent only to the authorized email.</p>
+          <button id="send-otp-button" class="primary-action" type="button">Send OTP</button>
+          <label id="otp-code-group" class="field-group" hidden>
+            <span>Verification code</span>
+            <div class="input-shell">
+              <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                <path d="M12 3 5 6v5c0 4.5 3 8 7 10 4-2 7-5.5 7-10V6z" />
+                <path d="M9.5 12.2 11.4 14 15 10.4" />
+              </svg>
+              <input id="otp-code" name="otp" type="password" inputmode="numeric" autocomplete="one-time-code" minlength="6" maxlength="6" placeholder="6-digit OTP" />
+            </div>
+          </label>
+          <button id="verify-otp-button" class="primary-action" type="submit" hidden>Verify OTP</button>
+          <p id="otp-login-message" class="form-message" role="status"></p>
+        </form>
+      </section>
+    </main>
+
+    <main id="app-view" class="app-shell" hidden>
+      <header class="app-header">
+        <div>
+          <p class="eyebrow">To Do Task</p>
+          <h1>لوحة المهام</h1>
+        </div>
+        <div class="header-actions">
+          <a class="secondary-button" href="/api/report.csv" download>تحميل تقرير</a>
+          <button id="logout-button" class="ghost-button" type="button">تسجيل خروج</button>
+        </div>
+      </header>
+
+      <section class="stats-grid" aria-label="تقرير مختصر">
+        <article><span id="stat-total">0</span><p>إجمالي المهام</p></article>
+        <article><span id="stat-active">0</span><p>المهام النشطة</p></article>
+        <article><span id="stat-completed">0</span><p>المهام المكتملة</p></article>
+        <article><span id="stat-high">0</span><p>عالية الأولوية</p></article>
+        <article><span id="stat-overdue">0</span><p>المهام المتأخرة</p></article>
+      </section>
+
+      <section class="task-composer" aria-labelledby="composer-title">
+        <h2 id="composer-title">إضافة مهمة جديدة</h2>
+        <form id="task-form" class="task-form">
+          <input id="task-id" type="hidden" />
+          <label>
+            <span>عنوان المهمة</span>
+            <input id="task-title" type="text" maxlength="120" required />
+          </label>
+          <label>
+            <span>وصف اختياري</span>
+            <textarea id="task-description" rows="3" maxlength="500"></textarea>
+          </label>
+          <div class="form-row">
+            <label>
+              <span>الأولوية</span>
+              <select id="task-priority">
+                <option value="high">عالية</option>
+                <option value="medium" selected>متوسطة</option>
+                <option value="low">منخفضة</option>
+              </select>
+            </label>
+            <label>
+              <span>تاريخ التسليم</span>
+              <input id="task-due-date" type="date" />
+            </label>
+          </div>
+          <div class="composer-actions">
+            <button id="save-task-button" type="submit">إضافة المهمة</button>
+            <button id="cancel-edit-button" class="ghost-button" type="button" hidden>إلغاء التعديل</button>
+          </div>
+          <p id="task-message" class="form-message" role="status"></p>
+        </form>
+      </section>
+
+      <section class="task-section" aria-labelledby="active-title">
+        <div class="section-title">
+          <h2 id="active-title">المهام الحالية</h2>
+        </div>
+        <div id="active-tasks" class="task-list"></div>
+        <p id="active-empty" class="empty-state">لا توجد مهام حالية</p>
+      </section>
+
+      <section class="task-section" aria-labelledby="completed-title">
+        <div class="section-title">
+          <h2 id="completed-title">المهام المكتملة</h2>
+          <button id="toggle-completed" class="text-button" type="button" hidden>Show more</button>
+        </div>
+        <div id="completed-tasks" class="task-list"></div>
+        <p id="completed-empty" class="empty-state">لا توجد مهام مكتملة</p>
+      </section>
+    </main>
+
+    <script src="/app.js" defer></script>
+  </body>
+</html>
