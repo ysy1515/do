@@ -3,11 +3,12 @@ const fs = require("fs/promises");
 const path = require("path");
 const crypto = require("crypto");
 const taskStore = require("./src/storage/taskStore");
+const settingsStore = require("./src/storage/settingsStore");
 const EmailReminderService = require("./src/services/EmailReminderService");
 
 loadEnvFile();
 
-const PORT = Number(process.env.APP_PORT || 3000);
+const PORT = Number(process.env.APP_PORT || process.env.PORT || 3050);
 const LOGIN_EMAIL = process.env.LOGIN_EMAIL;
 const AUTHORIZED_EMAIL = process.env.AUTHORIZED_EMAIL || LOGIN_EMAIL;
 const LOGIN_PIN = process.env.LOGIN_PIN;
@@ -40,7 +41,7 @@ function loadEnvFile() {
 
 function assertAuthConfig() {
   if (!AUTHORIZED_EMAIL || !LOGIN_PIN) {
-    throw new Error("AUTHORIZED_EMAIL and LOGIN_PIN must be configured in .env or environment variables.");
+    throw new Error("Missing local auth config. Set AUTHORIZED_EMAIL and LOGIN_PIN in .env or environment variables.");
   }
 }
 
@@ -241,9 +242,21 @@ function makeCsv(tasks, language = "ar") {
   return `\uFEFF${rows.map((row) => row.map(escapeCsv).join(",")).join("\n")}`;
 }
 
+function stripBasePath(pathname) {
+  if (pathname === "/do") return "/";
+  if (pathname.startsWith("/do/")) return pathname.slice(3) || "/";
+  return pathname;
+}
+
 async function serveStatic(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
-  const requestedPath = url.pathname === "/" ? "/index.html" : url.pathname;
+  if (url.pathname === "/do") {
+    res.writeHead(308, { Location: "/do/" });
+    res.end();
+    return;
+  }
+  const pathname = stripBasePath(url.pathname);
+  const requestedPath = pathname === "/" ? "/index.html" : pathname;
   const filePath = path.normalize(path.join(PUBLIC_DIR, requestedPath));
   if (!filePath.startsWith(PUBLIC_DIR)) {
     res.writeHead(403);
@@ -258,7 +271,8 @@ async function serveStatic(req, res) {
       ".html": "text/html; charset=utf-8",
       ".css": "text/css; charset=utf-8",
       ".js": "text/javascript; charset=utf-8",
-      ".svg": "image/svg+xml"
+      ".svg": "image/svg+xml",
+      ".png": "image/png"
     };
     res.writeHead(200, { "Content-Type": types[ext] || "application/octet-stream" });
     res.end(file);
@@ -270,13 +284,14 @@ async function serveStatic(req, res) {
 
 async function handleApi(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
+  const routePath = stripBasePath(url.pathname);
 
-  if (url.pathname === "/api/session" && req.method === "GET") {
+  if (routePath === "/api/session" && req.method === "GET") {
     sendJson(res, 200, { authenticated: Boolean(getSession(req)) });
     return;
   }
 
-  if (url.pathname === "/api/login/pin" && req.method === "POST") {
+  if (routePath === "/api/login/pin" && req.method === "POST") {
     const lock = checkLock(req, res);
     if (lock.locked) return;
     const body = await readBody(req);
@@ -292,7 +307,7 @@ async function handleApi(req, res) {
     return;
   }
 
-  if (url.pathname === "/api/login" && req.method === "POST") {
+  if (routePath === "/api/login" && req.method === "POST") {
     const lock = checkLock(req, res);
     if (lock.locked) return;
     const body = await readBody(req);
@@ -308,7 +323,7 @@ async function handleApi(req, res) {
     return;
   }
 
-  if (url.pathname === "/api/login/otp/request" && req.method === "POST") {
+  if (routePath === "/api/login/otp/request" && req.method === "POST") {
     const lock = checkLock(req, res);
     if (lock.locked) return;
     const body = await readBody(req);
@@ -343,7 +358,7 @@ async function handleApi(req, res) {
     return;
   }
 
-  if (url.pathname === "/api/login/otp/verify" && req.method === "POST") {
+  if (routePath === "/api/login/otp/verify" && req.method === "POST") {
     const lock = checkLock(req, res);
     if (lock.locked) return;
     const body = await readBody(req);
@@ -369,27 +384,48 @@ async function handleApi(req, res) {
     return;
   }
 
-  if (url.pathname === "/api/logout" && req.method === "POST") {
+  if (routePath === "/api/logout" && req.method === "POST") {
     clearSession(req, res);
     sendJson(res, 200, { ok: true });
     return;
   }
 
-  if (url.pathname === "/api/tasks" && req.method === "GET") {
+  if (routePath === "/api/settings" && req.method === "GET") {
+    if (!requireAuth(req, res)) return;
+    sendJson(res, 200, await settingsStore.getSettings());
+    return;
+  }
+
+  if (routePath === "/api/settings" && req.method === "PUT") {
+    if (!requireAuth(req, res)) return;
+    const settings = await settingsStore.saveSettings(await readBody(req));
+    reminderService.refreshSettings();
+    sendJson(res, 200, settings);
+    return;
+  }
+
+  if (routePath === "/api/push/subscribe" && req.method === "POST") {
+    if (!requireAuth(req, res)) return;
+    await settingsStore.savePushSubscription(await readBody(req));
+    sendJson(res, 200, { ok: true });
+    return;
+  }
+
+  if (routePath === "/api/tasks" && req.method === "GET") {
     if (!requireAuth(req, res)) return;
     const tasks = await taskStore.listTasks();
     sendJson(res, 200, { tasks, stats: activeStats(tasks) });
     return;
   }
 
-  if (url.pathname === "/api/tasks" && req.method === "POST") {
+  if (routePath === "/api/tasks" && req.method === "POST") {
     if (!requireAuth(req, res)) return;
     const task = await taskStore.addTask(await readBody(req));
     sendJson(res, 201, { task });
     return;
   }
 
-  const taskMatch = url.pathname.match(/^\/api\/tasks\/([^/]+)(?:\/(complete))?$/);
+  const taskMatch = routePath.match(/^\/api\/tasks\/([^/]+)(?:\/(complete))?$/);
   if (taskMatch && !requireAuth(req, res)) return;
   if (taskMatch && req.method === "PUT") {
     const task = await taskStore.updateTask(taskMatch[1], await readBody(req));
@@ -415,7 +451,7 @@ async function handleApi(req, res) {
     return;
   }
 
-  if (url.pathname === "/api/report.csv" && req.method === "GET") {
+  if (routePath === "/api/report.csv" && req.method === "GET") {
     if (!requireAuth(req, res)) return;
     const language = url.searchParams.get("lang") === "en" ? "en" : "ar";
     const tasks = await taskStore.listTasks();
@@ -429,7 +465,7 @@ async function handleApi(req, res) {
     return;
   }
 
-  if (url.pathname === "/api/reminders/test" && req.method === "POST") {
+  if (routePath === "/api/reminders/test" && req.method === "POST") {
     if (!requireAuth(req, res)) return;
     const result = await reminderService.sendTestReminderEmail();
     sendJson(res, result.sent ? 200 : 503, result.sent ? { ok: true } : { error: "Email reminder service is not configured." });
@@ -441,7 +477,8 @@ async function handleApi(req, res) {
 
 const server = http.createServer(async (req, res) => {
   try {
-    if (req.url.startsWith("/api/")) {
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    if (stripBasePath(url.pathname).startsWith("/api/")) {
       await handleApi(req, res);
       return;
     }
@@ -453,7 +490,7 @@ const server = http.createServer(async (req, res) => {
 
 assertAuthConfig();
 
-const reminderService = new EmailReminderService({ taskStore });
+const reminderService = new EmailReminderService({ taskStore, settingsStore });
 reminderService.start();
 
 server.listen(PORT, () => {

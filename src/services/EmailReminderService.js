@@ -10,14 +10,13 @@ const {
 } = require("../email/templates");
 
 class EmailReminderService {
-  constructor({ taskStore, env = process.env, logger = console }) {
+  constructor({ taskStore, settingsStore, env = process.env, logger = console }) {
     this.taskStore = taskStore;
+    this.settingsStore = settingsStore;
     this.env = env;
     this.logger = logger;
-    this.dailyTimer = null;
-    this.dailyInterval = null;
-    this.overdueTimer = null;
-    this.overdueInterval = null;
+    this.tickTimer = null;
+    this.tickInterval = null;
     this.transporter = null;
     this.missingConfigLogged = false;
     this.missingOverdueConfigLogged = false;
@@ -27,15 +26,16 @@ class EmailReminderService {
   }
 
   start() {
-    this.scheduleDailyNotifications();
-    this.scheduleHourlyOverdueAlerts();
+    this.scheduleNotificationTick();
   }
 
   stop() {
-    if (this.dailyTimer) clearTimeout(this.dailyTimer);
-    if (this.dailyInterval) clearInterval(this.dailyInterval);
-    if (this.overdueTimer) clearTimeout(this.overdueTimer);
-    if (this.overdueInterval) clearInterval(this.overdueInterval);
+    if (this.tickTimer) clearTimeout(this.tickTimer);
+    if (this.tickInterval) clearInterval(this.tickInterval);
+  }
+
+  refreshSettings() {
+    // The tick reads settings from storage every run, so no restart is required.
   }
 
   getConfig() {
@@ -79,48 +79,25 @@ class EmailReminderService {
     return this.transporter;
   }
 
-  scheduleDailyNotifications() {
-    const delay = this.msUntilNextRiyadhEleven();
-    this.dailyTimer = setTimeout(() => {
-      this.runDailyNotifications().catch((error) => {
-        this.logger.warn("Daily email notification check failed:", error.message);
+  scheduleNotificationTick() {
+    const delay = this.msUntilNextMinute();
+    this.tickTimer = setTimeout(() => {
+      this.runNotificationTick().catch((error) => {
+        this.logger.warn("Email notification tick failed:", error.message);
       });
-      this.dailyInterval = setInterval(() => {
-        this.runDailyNotifications().catch((error) => {
-          this.logger.warn("Daily email notification check failed:", error.message);
+      this.tickInterval = setInterval(() => {
+        this.runNotificationTick().catch((error) => {
+          this.logger.warn("Email notification tick failed:", error.message);
         });
-      }, 24 * 60 * 60 * 1000);
+      }, 60 * 1000);
     }, delay);
   }
 
-  scheduleHourlyOverdueAlerts() {
-    const delay = this.msUntilNextHour();
-    this.overdueTimer = setTimeout(() => {
-      this.sendOverdueTasksAlert().catch((error) => {
-        this.logger.warn("Overdue email alert check failed:", error.message);
-      });
-      this.overdueInterval = setInterval(() => {
-        this.sendOverdueTasksAlert().catch((error) => {
-          this.logger.warn("Overdue email alert check failed:", error.message);
-        });
-      }, 60 * 60 * 1000);
-    }, delay);
-  }
-
-  msUntilNextHour(now = new Date()) {
+  msUntilNextMinute(now = new Date()) {
     const next = new Date(now);
-    next.setMinutes(0, 0, 0);
-    next.setHours(next.getHours() + 1);
+    next.setSeconds(0, 0);
+    next.setMinutes(next.getMinutes() + 1);
     return next.getTime() - now.getTime();
-  }
-
-  msUntilNextRiyadhEleven(now = new Date()) {
-    const riyadh = this.getRiyadhDateParts(now);
-    let nextRun = Date.UTC(riyadh.year, riyadh.month - 1, riyadh.day, 8, 0, 0, 0);
-    if (nextRun <= now.getTime()) {
-      nextRun += 24 * 60 * 60 * 1000;
-    }
-    return nextRun - now.getTime();
   }
 
   getRiyadhDateParts(date = new Date()) {
@@ -156,6 +133,21 @@ class EmailReminderService {
     return `${values.year}-${values.month}-${values.day}T${values.hour}`;
   }
 
+  getRiyadhTimeKey(date = new Date()) {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Riyadh",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23"
+    }).formatToParts(date);
+    const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+    return `${values.hour}:${values.minute}`;
+  }
+
+  getRiyadhHourNumber(date = new Date()) {
+    return Number(this.getRiyadhTimeKey(date).slice(0, 2));
+  }
+
   daysUntilDue(dueDate, now = new Date()) {
     if (!dueDate) return null;
     const [dueYear, dueMonth, dueDay] = String(dueDate).split("-").map(Number);
@@ -181,11 +173,39 @@ class EmailReminderService {
     await fs.writeFile(this.logFile, `${JSON.stringify(log, null, 2)}\n`, "utf8");
   }
 
-  async runDailyNotifications() {
+  async getSettings() {
+    return this.settingsStore ? this.settingsStore.getSettings() : {};
+  }
+
+  async runNotificationTick(now = new Date()) {
+    const settings = await this.getSettings();
     const tasks = await this.taskStore.listTasks();
     const log = await this.readReminderLog();
-    await this.sendPreDueReminders(tasks, log);
-    await this.sendDailyActiveTasksReport(tasks, log);
+    const timeKey = this.getRiyadhTimeKey(now);
+
+    if (timeKey === settings.notifications.dailyActiveTasksTime) {
+      if (settings.notifications.deadlineRemindersEnabled) {
+        await this.sendPreDueReminders(tasks, log);
+      }
+      if (settings.notifications.dailyActiveTasksEnabled) {
+        await this.sendDailyActiveTasksReport(tasks, log);
+      }
+    }
+
+    if (this.shouldRunOverdue(settings, now)) {
+      await this.sendOverdueTasksAlert({ settings, tasks, log, now });
+    }
+
+    await this.sendPriorityReminders({ settings, tasks, log, now });
+    await this.writeReminderLog(log);
+  }
+
+  async runDailyNotifications() {
+    const settings = await this.getSettings();
+    const tasks = await this.taskStore.listTasks();
+    const log = await this.readReminderLog();
+    if (settings.notifications.deadlineRemindersEnabled) await this.sendPreDueReminders(tasks, log);
+    if (settings.notifications.dailyActiveTasksEnabled) await this.sendDailyActiveTasksReport(tasks, log);
     await this.writeReminderLog(log);
   }
 
@@ -256,11 +276,85 @@ class EmailReminderService {
     if (result.sent) log[logKey] = new Date().toISOString();
   }
 
+  prioritySlots(dailyCount) {
+    if (dailyCount <= 0) return [];
+    const start = 9;
+    const end = 17;
+    if (dailyCount === 1) return [11];
+    return Array.from({ length: dailyCount }, (_, index) => {
+      return Math.round(start + ((end - start) * index) / (dailyCount - 1));
+    });
+  }
+
+  async sendPriorityReminders({ settings, tasks, log, now = new Date() }) {
+    if (!this.hasSmtpConfig()) return;
+    const hour = this.getRiyadhHourNumber(now);
+    const todayKey = this.getRiyadhDateKey(now);
+    const activeTasks = tasks.filter((task) => task.status === "active");
+
+    for (const priority of ["high", "medium", "low"]) {
+      const config = settings.notifications.priorityReminders[priority];
+      if (!config.enabled || config.dailyCount <= 0) continue;
+      if (!this.prioritySlots(config.dailyCount).includes(hour)) continue;
+
+      const logKey = `priority:${priority}:${todayKey}:${hour}`;
+      if (log[logKey]) continue;
+
+      const priorityTasks = activeTasks.filter((task) => task.priority === priority);
+      if (priorityTasks.length === 0) continue;
+
+      const result = await this.sendMail({
+        to: this.getConfig().to,
+        subject: `To Do Task - ${priority} priority active tasks`,
+        body: [
+          `${priority} priority active tasks: ${priorityTasks.length}`,
+          "",
+          ...priorityTasks.map((task, index) => `${index + 1}. ${task.title} | due: ${task.dueDate || "No due date"}`)
+        ].join("\n"),
+        html: renderDailyReportEmail({
+          language: this.defaultLanguage,
+          tasks: priorityTasks,
+          counts: {
+            total: priorityTasks.length,
+            high: priorityTasks.filter((task) => task.priority === "high").length,
+            overdue: priorityTasks.filter((task) => task.dueDate && this.daysUntilDue(task.dueDate) < 0).length
+          }
+        })
+      });
+
+      if (result.sent) log[logKey] = new Date().toISOString();
+    }
+  }
+
   getOverdueTasks(tasks) {
     return tasks.filter((task) => task.status !== "completed" && task.dueDate && this.daysUntilDue(task.dueDate) < 0);
   }
 
-  async sendOverdueTasksAlert() {
+  shouldRunOverdue(settings, now = new Date()) {
+    if (!settings.notifications.overdueEnabled) return false;
+    const hour = this.getRiyadhHourNumber(now);
+    if (settings.notifications.overdueFrequency === "daily") {
+      return this.getRiyadhTimeKey(now) === settings.notifications.dailyActiveTasksTime;
+    }
+    if (settings.notifications.overdueFrequency === "every2hours") {
+      return now.getUTCMinutes() === 0 && hour % 2 === 0;
+    }
+    return now.getUTCMinutes() === 0;
+  }
+
+  overdueLogKey(settings, now = new Date()) {
+    if (settings.notifications.overdueFrequency === "daily") return `overdue-alert:${this.getRiyadhDateKey(now)}`;
+    if (settings.notifications.overdueFrequency === "every2hours") {
+      const hour = this.getRiyadhHourNumber(now);
+      return `overdue-alert:${this.getRiyadhDateKey(now)}:${Math.floor(hour / 2) * 2}`;
+    }
+    return `overdue-alert:${this.getRiyadhHourKey(now)}`;
+  }
+
+  async sendOverdueTasksAlert({ settings, tasks, log, now = new Date() } = {}) {
+    settings = settings || await this.getSettings();
+    if (!settings.notifications.overdueEnabled) return { sent: false, reason: "DISABLED" };
+
     if (!this.hasSmtpConfig()) {
       if (!this.missingOverdueConfigLogged) {
         this.logger.info("Overdue email alerts are disabled because SMTP settings are missing.");
@@ -269,13 +363,12 @@ class EmailReminderService {
       return { sent: false, reason: "SMTP_NOT_CONFIGURED" };
     }
 
-    const tasks = await this.taskStore.listTasks();
+    tasks = tasks || await this.taskStore.listTasks();
     const overdueTasks = this.getOverdueTasks(tasks);
     if (overdueTasks.length === 0) return { sent: false, reason: "NO_OVERDUE_TASKS" };
 
-    const log = await this.readReminderLog();
-    const hourKey = this.getRiyadhHourKey();
-    const logKey = `overdue-alert:${hourKey}`;
+    log = log || await this.readReminderLog();
+    const logKey = this.overdueLogKey(settings, now);
     if (log[logKey]) return { sent: false, reason: "ALREADY_SENT_THIS_HOUR" };
 
     const rows = overdueTasks.map((task, index) => {
@@ -309,7 +402,7 @@ class EmailReminderService {
       if (result.sent) {
         log[logKey] = new Date().toISOString();
         log.lastOverdueAlertSentAt = log[logKey];
-        await this.writeReminderLog(log);
+        if (!arguments[0]?.log) await this.writeReminderLog(log);
       }
       return result;
     } catch (error) {
@@ -319,6 +412,8 @@ class EmailReminderService {
   }
 
   async sendDueSummary() {
+    const settings = await this.getSettings();
+    if (!settings.notifications.deadlineRemindersEnabled) return;
     const tasks = await this.taskStore.listTasks();
     const log = await this.readReminderLog();
     await this.sendPreDueReminders(tasks, log);
@@ -326,6 +421,10 @@ class EmailReminderService {
   }
 
   async sendTaskCompletedEmail(task, language = this.defaultLanguage) {
+    const settings = await this.getSettings();
+    if (!settings.notifications.taskCompletedEmailEnabled) {
+      return { sent: false, reason: "DISABLED" };
+    }
     try {
       return await this.sendMail({
         to: this.getConfig().to,

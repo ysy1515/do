@@ -4,8 +4,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>To Do Task</title>
-    <link rel="icon" type="image/svg+xml" href="/do/favicon.svg" />
-    <link rel="stylesheet" href="/do/styles.css?v=303" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <link rel="stylesheet" href="styles.css?v=303" />
   </head>
   <body>
     <main id="login-view" class="login-shell" dir="ltr" hidden>
@@ -94,6 +94,7 @@
     </main>
 
     <main id="app-view" class="app-shell" hidden>
+      <div class="achievement-backdrop" aria-hidden="true"></div>
       <header class="app-header">
         <div>
           <p class="eyebrow">To Do Task</p>
@@ -110,7 +111,13 @@
             </svg>
             <span id="language-toggle-text">EN</span>
           </button>
-          <a id="report-link" class="secondary-button" href="/do/api/report.csv?lang=ar" download>تحميل التقرير</a>
+          <button id="settings-button" class="icon-button settings-button" type="button" aria-label="Settings">
+            <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+              <path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5z" />
+              <path d="M19.4 15a1.8 1.8 0 0 0 .36 2l.05.05a2.1 2.1 0 0 1-2.97 2.97l-.05-.05a1.8 1.8 0 0 0-2-.36 1.8 1.8 0 0 0-1.1 1.66V21a2.1 2.1 0 0 1-4.2 0v-.08a1.8 1.8 0 0 0-1.1-1.66 1.8 1.8 0 0 0-2 .36l-.05.05a2.1 2.1 0 0 1-2.97-2.97l.05-.05a1.8 1.8 0 0 0 .36-2 1.8 1.8 0 0 0-1.66-1.1H2a2.1 2.1 0 0 1 0-4.2h.08a1.8 1.8 0 0 0 1.66-1.1 1.8 1.8 0 0 0-.36-2l-.05-.05a2.1 2.1 0 0 1 2.97-2.97l.05.05a1.8 1.8 0 0 0 2 .36 1.8 1.8 0 0 0 1.1-1.66V2a2.1 2.1 0 0 1 4.2 0v.08a1.8 1.8 0 0 0 1.1 1.66 1.8 1.8 0 0 0 2-.36l.05-.05a2.1 2.1 0 0 1 2.97 2.97l-.05.05a1.8 1.8 0 0 0-.36 2 1.8 1.8 0 0 0 1.66 1.1H22a2.1 2.1 0 0 1 0 4.2h-.08A1.8 1.8 0 0 0 19.4 15z" />
+            </svg>
+          </button>
+          <a id="report-link" class="secondary-button" href="api/report.csv?lang=ar" download>تحميل التقرير</a>
           <button id="logout-button" class="ghost-button" type="button">تسجيل خروج</button>
         </div>
       </header>
@@ -170,6 +177,78 @@
         </section>
       </div>
 
+      <div id="settings-panel" class="settings-shell" hidden>
+        <div id="settings-overlay" class="settings-overlay" aria-hidden="true"></div>
+        <aside class="settings-card" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+          <header class="settings-header">
+            <div>
+              <p id="settings-kicker" class="eyebrow">Settings</p>
+              <h2 id="settings-title">Settings</h2>
+            </div>
+            <button id="close-settings-button" class="modal-close-button" type="button" aria-label="Close">×</button>
+          </header>
+          <form id="settings-form" class="settings-form">
+            <section class="settings-section">
+              <h3 id="account-title">Account</h3>
+              <div class="account-card">
+                <div><span id="account-name-label">Name</span><strong id="account-name">Yahya Alshahrani</strong></div>
+                <div><span id="account-email-label">Email</span><strong id="account-email">yalshahrani@asda.gov.sa</strong></div>
+                <div><span id="account-timezone-label">Timezone</span><strong id="account-timezone">Asia/Riyadh</strong></div>
+              </div>
+            </section>
+
+            <section class="settings-section">
+              <h3 id="notification-settings-title">Notification Settings</h3>
+              <label class="toggle-row">
+                <span><strong id="daily-report-label">Daily active tasks report</strong><small id="daily-report-help">Send time</small></span>
+                <input id="daily-report-enabled" type="checkbox" />
+              </label>
+              <label class="field-row"><span id="daily-report-time-label">Send time</span><input id="daily-report-time" type="time" /></label>
+              <label class="toggle-row">
+                <span><strong id="task-completed-email-label">Task completed email</strong><small id="task-completed-email-help">Send email when a task is completed</small></span>
+                <input id="task-completed-email-enabled" type="checkbox" />
+              </label>
+              <label class="toggle-row">
+                <span><strong id="overdue-alerts-label">Overdue alerts</strong><small id="overdue-alerts-help">Only when overdue tasks exist</small></span>
+                <input id="overdue-enabled" type="checkbox" />
+              </label>
+              <label class="field-row"><span id="overdue-frequency-label">Frequency</span><select id="overdue-frequency"><option value="hourly">Hourly</option><option value="every2hours">Every two hours</option><option value="daily">Daily</option></select></label>
+              <label class="toggle-row">
+                <span><strong id="deadline-reminders-label">Deadline reminders</strong><small id="deadline-reminders-help">3 days, 2 days, and 1 day before due date</small></span>
+                <input id="deadline-reminders-enabled" type="checkbox" />
+              </label>
+              <div class="priority-settings">
+                <div class="priority-setting">
+                  <label class="toggle-row"><span><strong id="priority-high-label">High Priority</strong><small id="priority-high-help">Daily reminders</small></span><input id="priority-high-enabled" type="checkbox" /></label>
+                  <input id="priority-high-count" type="number" min="0" max="6" />
+                </div>
+                <div class="priority-setting">
+                  <label class="toggle-row"><span><strong id="priority-medium-label">Medium Priority</strong><small id="priority-medium-help">Daily reminders</small></span><input id="priority-medium-enabled" type="checkbox" /></label>
+                  <input id="priority-medium-count" type="number" min="0" max="4" />
+                </div>
+                <div class="priority-setting">
+                  <label class="toggle-row"><span><strong id="priority-low-label">Low Priority</strong><small id="priority-low-help">Daily reminders</small></span><input id="priority-low-enabled" type="checkbox" /></label>
+                  <input id="priority-low-count" type="number" min="0" max="2" />
+                </div>
+              </div>
+            </section>
+
+            <section class="settings-section">
+              <h3 id="push-title">Push Notifications</h3>
+              <p id="push-description" class="settings-note">Enable browser push notifications where supported.</p>
+              <button id="enable-push-button" class="secondary-button" type="button">Enable Push Notifications</button>
+              <p id="push-ios-note" class="settings-note" hidden>For iPhone notifications, you may need to add the app to the Home Screen.</p>
+              <p id="push-message" class="form-message" role="status"></p>
+            </section>
+
+            <footer class="settings-footer">
+              <p id="settings-message" class="form-message" role="status"></p>
+              <button id="save-settings-button" class="primary-action" type="submit">Save Settings</button>
+            </footer>
+          </form>
+        </aside>
+      </div>
+
       <section class="task-section" aria-labelledby="active-title">
         <div class="section-title"><h2 id="active-title">المهام الحالية</h2></div>
         <div id="active-tasks" class="task-list"></div>
@@ -198,6 +277,6 @@
       </footer>
     </main>
 
-    <script src="/do/app.js?v=303" defer></script>
+    <script src="app.js?v=303" defer></script>
   </body>
 </html>

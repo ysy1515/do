@@ -32,8 +32,19 @@ const taskModal = document.querySelector("#task-modal");
 const taskModalOverlay = document.querySelector("#task-modal-overlay");
 const closeTaskModalButton = document.querySelector("#close-task-modal-button");
 const taskModalTitle = document.querySelector("#task-modal-title");
+const settingsButton = document.querySelector("#settings-button");
+const settingsPanel = document.querySelector("#settings-panel");
+const settingsOverlay = document.querySelector("#settings-overlay");
+const closeSettingsButton = document.querySelector("#close-settings-button");
+const settingsForm = document.querySelector("#settings-form");
+const settingsMessage = document.querySelector("#settings-message");
+const pushMessage = document.querySelector("#push-message");
+const enablePushButton = document.querySelector("#enable-push-button");
 const screenAnchor = document.createComment("active-screen");
 document.body.insertBefore(screenAnchor, document.querySelector("script"));
+
+const BASE_PATH = window.location.pathname.startsWith("/do") ? "/do" : "";
+const apiPath = (path) => `${BASE_PATH}${path.startsWith("/") ? path : `/${path}`}`;
 
 const fields = {
   id: document.querySelector("#task-id"),
@@ -51,6 +62,30 @@ let isAuthenticated = false;
 let authMode = "pin";
 let otpSent = false;
 let language = localStorage.getItem("todo_language") || "ar";
+let settings = null;
+
+const settingsFields = {
+  dailyActiveTasksEnabled: document.querySelector("#daily-report-enabled"),
+  dailyActiveTasksTime: document.querySelector("#daily-report-time"),
+  taskCompletedEmailEnabled: document.querySelector("#task-completed-email-enabled"),
+  overdueEnabled: document.querySelector("#overdue-enabled"),
+  overdueFrequency: document.querySelector("#overdue-frequency"),
+  deadlineRemindersEnabled: document.querySelector("#deadline-reminders-enabled"),
+  priority: {
+    high: {
+      enabled: document.querySelector("#priority-high-enabled"),
+      count: document.querySelector("#priority-high-count")
+    },
+    medium: {
+      enabled: document.querySelector("#priority-medium-enabled"),
+      count: document.querySelector("#priority-medium-count")
+    },
+    low: {
+      enabled: document.querySelector("#priority-low-enabled"),
+      count: document.querySelector("#priority-low-count")
+    }
+  }
+};
 
 const translations = {
   ar: {
@@ -101,7 +136,39 @@ const translations = {
     showLess: "عرض أقل",
     footer: "© 2026 جميع الحقوق محفوظة ليحيى الشهراني",
     langToggle: "EN",
-    reportFile: "تقرير-المهام.csv"
+    reportFile: "تقرير-المهام.csv",
+    settings: "الإعدادات",
+    account: "الحساب",
+    name: "الاسم",
+    email: "البريد الإلكتروني",
+    timezone: "المنطقة الزمنية",
+    riyadhTimezone: "توقيت الرياض",
+    notificationSettings: "إعدادات الإشعارات",
+    dailyReport: "تقرير يومي للمهام الحالية",
+    sendTime: "وقت الإرسال",
+    taskCompletedEmail: "إرسال بريد عند اكتمال المهمة",
+    taskCompletedEmailHelp: "يرسل بريدًا عند تحويل أي مهمة إلى مكتملة",
+    overdueAlerts: "إشعارات المهام المتأخرة",
+    overdueAlertsHelp: "لا ترسل إذا لا توجد مهام متأخرة",
+    frequency: "التكرار",
+    hourly: "كل ساعة",
+    every2hours: "كل ساعتين",
+    daily: "مرة يوميًا",
+    deadlineReminders: "تذكير قبل تاريخ التسليم",
+    deadlineRemindersHelp: "قبل 3 أيام، قبل يومين، وقبل يوم",
+    priorityReminders: "إشعارات حسب الأولوية",
+    dailyReminders: "عدد الإشعارات اليومية",
+    pushNotifications: "إشعارات الجوال",
+    pushDescription: "تفعيل إشعارات المتصفح حيثما كانت مدعومة.",
+    enablePush: "تفعيل إشعارات الجوال",
+    pushEnabled: "تم تفعيل إشعارات الجوال",
+    pushDenied: "تم رفض صلاحية الإشعارات من المتصفح.",
+    pushUnsupported: "المتصفح لا يدعم إشعارات الجوال.",
+    pushIosNote: "لإشعارات iPhone، قد تحتاج إضافة التطبيق إلى الشاشة الرئيسية.",
+    saveSettings: "حفظ الإعدادات",
+    settingsSaved: "تم حفظ الإعدادات",
+    settingsSaveFailed: "تعذر حفظ الإعدادات.",
+    loadingSettings: "جارٍ تحميل الإعدادات..."
   },
   en: {
     dashboardTitle: "Task Dashboard",
@@ -151,7 +218,39 @@ const translations = {
     showLess: "Show less",
     footer: "© 2026 All rights reserved to Yahya Alshahrani",
     langToggle: "AR",
-    reportFile: "tasks-report.csv"
+    reportFile: "tasks-report.csv",
+    settings: "Settings",
+    account: "Account",
+    name: "Name",
+    email: "Email",
+    timezone: "Timezone",
+    riyadhTimezone: "Riyadh timezone",
+    notificationSettings: "Notification Settings",
+    dailyReport: "Daily active tasks report",
+    sendTime: "Send time",
+    taskCompletedEmail: "Task completed email",
+    taskCompletedEmailHelp: "Send email when a task is completed",
+    overdueAlerts: "Overdue alerts",
+    overdueAlertsHelp: "Only send when overdue tasks exist",
+    frequency: "Frequency",
+    hourly: "Hourly",
+    every2hours: "Every two hours",
+    daily: "Daily",
+    deadlineReminders: "Deadline reminders",
+    deadlineRemindersHelp: "3 days, 2 days, and 1 day before due date",
+    priorityReminders: "Priority reminders",
+    dailyReminders: "Daily reminders",
+    pushNotifications: "Push Notifications",
+    pushDescription: "Enable browser push notifications where supported.",
+    enablePush: "Enable Push Notifications",
+    pushEnabled: "Push notifications enabled",
+    pushDenied: "Notification permission was denied by the browser.",
+    pushUnsupported: "This browser does not support push notifications.",
+    pushIosNote: "For iPhone notifications, you may need to add the app to the Home Screen.",
+    saveSettings: "Save Settings",
+    settingsSaved: "Settings saved",
+    settingsSaveFailed: "Unable to save settings.",
+    loadingSettings: "Loading settings..."
   }
 };
 
@@ -207,13 +306,45 @@ function applyLanguage() {
   languageToggleText.textContent = t("langToggle");
   taskModal.dir = language === "ar" ? "rtl" : "ltr";
   reportLink.textContent = t("report");
-  reportLink.href = `/api/report.csv?lang=${language}`;
+  reportLink.href = apiPath(`/api/report.csv?lang=${language}`);
   reportLink.setAttribute("download", t("reportFile"));
   logoutButton.textContent = t("logout");
   cancelEditButton.textContent = t("cancelEdit");
   cancelEditButton.textContent = t("cancel");
   saveTaskButton.textContent = fields.id.value ? t("saveEdit") : t("addTask");
   for (const option of fields.priority.options) option.textContent = t(option.value);
+  settingsButton.setAttribute("aria-label", t("settings"));
+  setText("settings-kicker", "To Do Task");
+  setText("settings-title", t("settings"));
+  setText("account-title", t("account"));
+  setText("account-name-label", t("name"));
+  setText("account-email-label", t("email"));
+  setText("account-timezone-label", t("timezone"));
+  setText("account-timezone", t("riyadhTimezone"));
+  setText("notification-settings-title", t("notificationSettings"));
+  setText("daily-report-label", t("dailyReport"));
+  setText("daily-report-help", t("sendTime"));
+  setText("daily-report-time-label", t("sendTime"));
+  setText("task-completed-email-label", t("taskCompletedEmail"));
+  setText("task-completed-email-help", t("taskCompletedEmailHelp"));
+  setText("overdue-alerts-label", t("overdueAlerts"));
+  setText("overdue-alerts-help", t("overdueAlertsHelp"));
+  setText("overdue-frequency-label", t("frequency"));
+  setText("deadline-reminders-label", t("deadlineReminders"));
+  setText("deadline-reminders-help", t("deadlineRemindersHelp"));
+  setText("priority-high-label", t("high"));
+  setText("priority-medium-label", t("medium"));
+  setText("priority-low-label", t("low"));
+  setText("priority-high-help", t("dailyReminders"));
+  setText("priority-medium-help", t("dailyReminders"));
+  setText("priority-low-help", t("dailyReminders"));
+  setText("push-title", t("pushNotifications"));
+  setText("push-description", t("pushDescription"));
+  setText("enable-push-button", t("enablePush"));
+  setText("push-ios-note", t("pushIosNote"));
+  setText("save-settings-button", t("saveSettings"));
+  settingsPanel.dir = language === "ar" ? "rtl" : "ltr";
+  for (const option of settingsFields.overdueFrequency.options) option.textContent = t(option.value);
   toggleCompleted.textContent = showAllCompleted ? t("showLess") : t("showMore");
   renderTasks();
 }
@@ -315,7 +446,7 @@ function formatRemaining(ms) {
 }
 
 async function api(path, options = {}) {
-  const response = await fetch(path, {
+  const response = await fetch(apiPath(path), {
     headers: { "Content-Type": "application/json", ...(options.headers || {}) },
     ...options
   });
@@ -329,6 +460,126 @@ async function api(path, options = {}) {
     throw error;
   }
   return payload;
+}
+
+function fillSettingsForm(value) {
+  settings = value;
+  const notifications = settings.notifications;
+  settingsFields.dailyActiveTasksEnabled.checked = notifications.dailyActiveTasksEnabled;
+  settingsFields.dailyActiveTasksTime.value = notifications.dailyActiveTasksTime;
+  settingsFields.taskCompletedEmailEnabled.checked = notifications.taskCompletedEmailEnabled;
+  settingsFields.overdueEnabled.checked = notifications.overdueEnabled;
+  settingsFields.overdueFrequency.value = notifications.overdueFrequency;
+  settingsFields.deadlineRemindersEnabled.checked = notifications.deadlineRemindersEnabled;
+  for (const priority of ["high", "medium", "low"]) {
+    settingsFields.priority[priority].enabled.checked = notifications.priorityReminders[priority].enabled;
+    settingsFields.priority[priority].count.value = notifications.priorityReminders[priority].dailyCount;
+  }
+}
+
+function collectSettingsForm() {
+  return {
+    ...settings,
+    notifications: {
+      dailyActiveTasksEnabled: settingsFields.dailyActiveTasksEnabled.checked,
+      dailyActiveTasksTime: settingsFields.dailyActiveTasksTime.value || "11:00",
+      taskCompletedEmailEnabled: settingsFields.taskCompletedEmailEnabled.checked,
+      overdueEnabled: settingsFields.overdueEnabled.checked,
+      overdueFrequency: settingsFields.overdueFrequency.value,
+      deadlineRemindersEnabled: settingsFields.deadlineRemindersEnabled.checked,
+      priorityReminders: {
+        high: {
+          enabled: settingsFields.priority.high.enabled.checked,
+          dailyCount: Number(settingsFields.priority.high.count.value || 0)
+        },
+        medium: {
+          enabled: settingsFields.priority.medium.enabled.checked,
+          dailyCount: Number(settingsFields.priority.medium.count.value || 0)
+        },
+        low: {
+          enabled: settingsFields.priority.low.enabled.checked,
+          dailyCount: Number(settingsFields.priority.low.count.value || 0)
+        }
+      },
+      pushEnabled: Boolean(settings?.notifications?.pushEnabled)
+    }
+  };
+}
+
+async function loadSettings() {
+  const payload = await api("/api/settings");
+  fillSettingsForm(payload);
+  return payload;
+}
+
+async function saveSettings(nextSettings = collectSettingsForm()) {
+  const payload = await api("/api/settings", {
+    method: "PUT",
+    body: JSON.stringify(nextSettings)
+  });
+  fillSettingsForm(payload);
+  settingsMessage.textContent = t("settingsSaved");
+  return payload;
+}
+
+async function openSettingsPanel() {
+  settingsMessage.textContent = t("loadingSettings");
+  pushMessage.textContent = "";
+  settingsPanel.hidden = false;
+  settingsPanel.dir = language === "ar" ? "rtl" : "ltr";
+  document.body.classList.add("modal-open");
+  try {
+    await loadSettings();
+    settingsMessage.textContent = "";
+  } catch (error) {
+    settingsMessage.textContent = error.message;
+  }
+}
+
+function closeSettingsPanel() {
+  settingsPanel.hidden = true;
+  settingsMessage.textContent = "";
+  pushMessage.textContent = "";
+  document.body.classList.remove("modal-open");
+}
+
+function isIosDevice() {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
+
+async function enablePushNotifications() {
+  pushMessage.textContent = "";
+  if (!("Notification" in window) || !("serviceWorker" in navigator)) {
+    pushMessage.textContent = t("pushUnsupported");
+    return;
+  }
+
+  const permission = await Notification.requestPermission();
+  if (permission !== "granted") {
+    pushMessage.textContent = t("pushDenied");
+    return;
+  }
+
+  try {
+    const registration = await navigator.serviceWorker.register(`${BASE_PATH}/service-worker.js`);
+    await navigator.serviceWorker.ready;
+    await api("/api/push/subscribe", {
+      method: "POST",
+      body: JSON.stringify({
+        endpoint: `local-permission:${Date.now()}`,
+        permission,
+        userAgent: navigator.userAgent
+      })
+    });
+    settings.notifications.pushEnabled = true;
+    await saveSettings(settings);
+    pushMessage.textContent = t("pushEnabled");
+    if (registration.active) {
+      registration.active.postMessage({ type: "PUSH_ENABLED" });
+    }
+  } catch (error) {
+    pushMessage.textContent = error.message || t("pushUnsupported");
+  }
 }
 
 function loginErrorMessage(error) {
@@ -495,7 +746,7 @@ function renderTasks() {
 }
 
 async function loadTasks() {
-  const payload = await api("/do/api/tasks");
+  const payload = await api("/api/tasks");
   tasks = payload.tasks;
   setStats(payload.stats);
   renderTasks();
@@ -534,7 +785,7 @@ async function submitPinLogin() {
   if (submit.disabled) return;
   setButtonBusy(submit, true, "Signing in...", "Sign in");
   try {
-    await api("/do/api/login/pin", {
+    await api("/api/login/pin", {
       method: "POST",
       body: JSON.stringify({ pin: pinLoginForm.pin.value })
     });
@@ -567,7 +818,7 @@ sendOtpButton.addEventListener("click", async () => {
   otpLoginMessage.textContent = "";
   setButtonBusy(sendOtpButton, true, t("sendingOtp"), t("sendOtp"));
   try {
-    await api("/do/api/login/otp/request", {
+    await api("/api/login/otp/request", {
       method: "POST",
       body: JSON.stringify({ email: otpEmail.value.trim(), language })
     });
@@ -587,7 +838,7 @@ otpLoginForm.addEventListener("submit", async (event) => {
   otpLoginMessage.textContent = "";
   setButtonBusy(verifyOtpButton, true, "Verifying...", "Verify and Sign in");
   try {
-    await api("/do/api/login/otp/verify", {
+    await api("/api/login/otp/verify", {
       method: "POST",
       body: JSON.stringify({
         email: otpEmail.value.trim(),
@@ -610,7 +861,7 @@ taskForm.addEventListener("submit", async (event) => {
   try {
     const id = fields.id.value;
     const method = id ? "PUT" : "POST";
-    const path = id ? `/api/tasks/${id}` : "/do/api/tasks";
+    const path = id ? `/api/tasks/${id}` : "/api/tasks";
     await api(path, { method, body: JSON.stringify(taskPayload()) });
     closeTaskModal({ reset: true });
     await loadTasks();
@@ -623,10 +874,34 @@ openTaskModalButton.addEventListener("click", () => openTaskModal("add"));
 cancelEditButton.addEventListener("click", () => closeTaskModal({ reset: true }));
 closeTaskModalButton.addEventListener("click", () => closeTaskModal({ reset: true }));
 taskModalOverlay.addEventListener("click", () => closeTaskModal({ reset: true }));
+settingsButton.addEventListener("click", openSettingsPanel);
+closeSettingsButton.addEventListener("click", closeSettingsPanel);
+settingsOverlay.addEventListener("click", closeSettingsPanel);
+enablePushButton.addEventListener("click", enablePushNotifications);
+
+settingsForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  settingsMessage.textContent = "";
+  setButtonBusy(document.querySelector("#save-settings-button"), true, t("saveSettings"), t("saveSettings"));
+  try {
+    await saveSettings();
+  } catch (error) {
+    settingsMessage.textContent = error.message || t("settingsSaveFailed");
+  } finally {
+    setButtonBusy(document.querySelector("#save-settings-button"), false, t("saveSettings"), t("saveSettings"));
+  }
+});
+
+if (isIosDevice()) {
+  document.querySelector("#push-ios-note").hidden = false;
+}
 
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !taskModal.hidden) {
     closeTaskModal({ reset: true });
+  }
+  if (event.key === "Escape" && !settingsPanel.hidden) {
+    closeSettingsPanel();
   }
 });
 
@@ -641,7 +916,7 @@ languageToggle.addEventListener("click", () => {
 });
 
 logoutButton.addEventListener("click", async () => {
-  await api("/do/api/logout", { method: "POST" });
+  await api("/api/logout", { method: "POST" });
   tasks = [];
   resetTaskForm();
   setAuthenticated(false);
@@ -652,9 +927,10 @@ async function init() {
   renderAuthState();
   setLoginMode("pin");
   try {
-    const session = await api("/do/api/session");
+    const session = await api("/api/session");
     if (session.authenticated) {
       setAuthenticated(true);
+      await loadSettings();
       await loadTasks();
     } else {
       setAuthenticated(false);
